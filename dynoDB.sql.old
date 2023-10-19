@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost
--- Generation Time: Oct 19, 2023 at 02:52 PM
+-- Generation Time: Oct 14, 2023 at 02:07 PM
 -- Server version: 10.4.28-MariaDB
 -- PHP Version: 8.2.4
 
@@ -46,35 +46,6 @@ DO
   EXECUTE IMMEDIATE CONCAT("SELECT id, version_id as version, ", @cols, " from data where id=", id ,";\n");
 END FOR$$
 
-DROP PROCEDURE IF EXISTS `get_data_with_relations`$$
-CREATE DEFINER=`root`@`localhost` PROCEDURE `get_data_with_relations` (IN `id` INT)   FOR i IN (SELECT version_id as v FROM data WHERE data.id=id)
-DO
-  set @cols = (SELECT GROUP_CONCAT( CONCAT('COLUMN_GET(data.value, "' ,field, '" as ', type, ' ) AS ', field) SEPARATOR ', ') from fields INNER JOIN version_fields on i.v=version_fields.version_id AND fields.id=version_fields.field_id);
-  
-  set @relations = '';
-  set @relation_cols = 'COLUMN_CREATE(';
-  FOR r IN (SELECT table_name as t, record_id as i FROM data_relations WHERE data_id=id)
-  DO
-  	-- set @relation_cols = CONCAT(@relation_cols, ',', (select GROUP_CONCAT(CONCAT(r.t, '.', COLUMN_NAME , ' AS ', r.t, '_', COLUMN_NAME)) from information_schema.COLUMNS where TABLE_NAME=r.t AND TABLE_SCHEMA='dynoDB'));
-    set @relation_cols = CONCAT(@relation_cols, '"', r.t, '",', 'COLUMN_CREATE(', (select GROUP_CONCAT(CONCAT('"',COLUMN_NAME , '" , ', r.t, '.', COLUMN_NAME)) from information_schema.COLUMNS where TABLE_NAME=r.t AND TABLE_SCHEMA='dynoDB') , '),');
-  	set @relations = CONCAT(@relations, ' INNER JOIN ', r.t, ' ON ', r.t, '.id=', r.i, ' ');
-  END FOR;
-  
-  -- SET @relation_cols = CONCAT(',', @relation_cols);
-  
-  SET @relation_cols = IF(
-      STRCMP(@relation_cols, 'COLUMN_CREATE('),
-  		CONCAT(TRIM(TRAILING ',' FROM @relation_cols), ')'),
-      	CONCAT(@relation_cols, 'NULL,NULL)')
-  );
-  
-  -- SET @relation_cols = CONCAT(TRIM(TRAILING ',' FROM @relation_cols), ')');
-  
-  -- SELECT CONCAT("SELECT data.id, data.version_id as version, ", @cols, @relation_cols , " from data " , @relations, " where data.id=", id , " ;\n");
-  -- SELECT CONCAT("SELECT data.id, data.version_id as version, ", @cols, ", COLUMN_JSON(",@relation_cols, ") AS relations" , " from data " , @relations, " where data.id=", id , " ;\n");
-  EXECUTE IMMEDIATE CONCAT("SELECT data.id, data.version_id as version, ", @cols, ", COLUMN_JSON(",@relation_cols, ") AS relations" , " from data " , @relations, " where data.id=", id , " ;\n");
-END FOR$$
-
 DELIMITER ;
 
 -- --------------------------------------------------------
@@ -88,20 +59,6 @@ CREATE TABLE `data` (
   `id` int(11) NOT NULL,
   `version_id` int(11) NOT NULL,
   `value` blob NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `data_relations`
---
-
-DROP TABLE IF EXISTS `data_relations`;
-CREATE TABLE `data_relations` (
-  `id` int(11) NOT NULL,
-  `data_id` int(11) NOT NULL,
-  `table_name` varchar(256) NOT NULL,
-  `record_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -153,14 +110,6 @@ ALTER TABLE `data`
   ADD KEY `vid` (`version_id`);
 
 --
--- Indexes for table `data_relations`
---
-ALTER TABLE `data_relations`
-  ADD PRIMARY KEY (`id`),
-  ADD KEY `data_id_index` (`data_id`),
-  ADD KEY `record_id_index` (`record_id`);
-
---
 -- Indexes for table `fields`
 --
 ALTER TABLE `fields`
@@ -191,12 +140,6 @@ ALTER TABLE `data`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT for table `data_relations`
---
-ALTER TABLE `data_relations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
-
---
 -- AUTO_INCREMENT for table `fields`
 --
 ALTER TABLE `fields`
@@ -223,12 +166,6 @@ ALTER TABLE `version_fields`
 --
 ALTER TABLE `data`
   ADD CONSTRAINT `ver_con` FOREIGN KEY (`version_id`) REFERENCES `versions` (`id`);
-
---
--- Constraints for table `data_relations`
---
-ALTER TABLE `data_relations`
-  ADD CONSTRAINT `data_id_con` FOREIGN KEY (`data_id`) REFERENCES `data` (`id`);
 
 --
 -- Constraints for table `version_fields`

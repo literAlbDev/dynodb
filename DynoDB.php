@@ -1,6 +1,8 @@
 <?php
 
 // Needs error handlings, better return schema
+// Change to json
+// does not support boolean
 class DynoDB
 {
     private $servername = "127.0.0.1";
@@ -36,6 +38,12 @@ class DynoDB
         return $data;
     }
 
+    function get_type($var) {
+        $type = gettype($var);
+        return $type == 'string' ? 'char' : 
+                                   ($type == 'boolean' ? 'int' : $type);
+    }
+
     function get_all_data()
     {
         if(!$this->conn)
@@ -54,6 +62,15 @@ class DynoDB
         return $this->runQuery($sql);
     }
 
+    function get_data_with_relations($id)
+    {
+        if(!$this->conn)
+            return false;
+
+        $sql = "CALL get_data_with_relations($id)";
+        return $this->runQuery($sql);
+    }
+
     private function getVersionFields(int $version) {
         $sql = "SELECT field, type FROM fields 
                 INNER JOIN version_fields
@@ -65,13 +82,14 @@ class DynoDB
     // CAUTION possible version duplication
     function add_new_versioned_data(array $data) {
         $sql = "";
-        $sqlInsertData = "INSERT INTO data(version_id, value) VALUES (@version_id, COLUMN_CREATE(";
+        $sqlInsertData = "INSERT INTO data(version_id, value) VALUES (@version_id, COLUMN_CREATE('relations', '' as char, ";
 
         $sql .= "INSERT INTO versions VALUES ();
                  SET @version_id = LAST_INSERT_ID();\n";
 
         foreach ($data as $key => $value) {
-            $type = gettype($value) == 'string' ? 'char' : (gettype($value) == 'boolean' ? 'bool' : gettype($value));
+            $type = $this->get_type($value);
+            $value = json_encode($value);
 
             $sql .= "INSERT INTO fields(field, type)
                          SELECT '$key', '$type'
@@ -80,10 +98,11 @@ class DynoDB
                      INSERT INTO version_fields(version_id, field_id)
                          VALUES (@version_id, @new_field_id);\n";
 
-            $sqlInsertData .= "'$key', '$value' as $type,";
+            $sqlInsertData .= "'$key', $value as $type,";
         }
         $sqlInsertData = rtrim($sqlInsertData, ',') . "));";
         $sql .= $sqlInsertData . " SELECT LAST_INSERT_ID() as id, @version_id as version;";
+        var_dump($sql);
 
         return $this->runQuery($sql);
         
@@ -91,11 +110,12 @@ class DynoDB
 
     function add_data(int $version, array $data) {
         $sql = "";
-        $sqlInsertData = "INSERT INTO data(version_id, value) VALUES ($version, COLUMN_CREATE(";
+        $sqlInsertData = "INSERT INTO data(version_id, value) VALUES ($version, COLUMN_CREATE('relations', '' as char, ";
 
         foreach ($data as $key => $value) {
-            $type = gettype($value) == 'string' ? 'char' : gettype($value);
-            $sqlInsertData .= "'$key', '$value' as $type,";
+            $type = $this->get_type($value);
+            $value = json_encode($value);
+            $sqlInsertData .= "'$key', $value as $type,";
         }
 
         $sqlInsertData = rtrim($sqlInsertData, ',') . "));";
@@ -104,16 +124,29 @@ class DynoDB
         return $this->runQuery($sql);
     }
 
+    // also change version
     function update_data(int $data_id, array $newData) {
-        $sql = "UPDATE data SET value=COLUMN_CREATE(";
+        $sql = "UPDATE data SET value=COLUMN_CREATE('relations', '' as char, ";
         foreach ($newData as $key => $value) {
-            $type = gettype($value) == 'string' ? 'char' : gettype($value);
-            $sql .= "'$key', '$value' as $type,";
+            $type = $this->get_type($value);
+            $value = json_encode($value);
+            $sql .= "'$key', $value as $type,";
         }
 
         $sql = rtrim($sql, ",") . ") WHERE id=$data_id;";
 
         return $this->runQuery($sql);
+    }
+
+    function add_relation(string $table, int $record_id, int $data_id){
+        $sql = "UPDATE data SET value=COLUMN_ADD(value,
+                                                 'relations',
+                                                 COLUMN_ADD(COLUMN_GET(value, 
+                                                                       'relations' as binary),
+                                                            '$table',
+                                                            '$record_id' as int))
+                WHERE id=$data_id";
+        return $sql;
     }
 
     function delete_data($id)

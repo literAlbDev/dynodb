@@ -16,7 +16,7 @@ echo "\n\n\n\nadding new versioned data:\n";
 $r = $db->add_new_versioned_data([
     'string_data' => "hello world",
     'integer_data' => 200,
-    'bool_data' => 0,
+    'bool_data' => false,
 ]);
 var_dump($r);
 
@@ -25,7 +25,7 @@ echo "\n\n\n\nadding another one but with the same version:\n";
 $r = $db->add_data($r[0]['version'],[
     'string_data' => "another hello world",
     'integer_data' => 50,
-    'bool_data' => 1,
+    'bool_data' => true,
 ]);
 var_dump($r);
 
@@ -41,7 +41,7 @@ $r = $db->update_data($r[1]['id'],
     [
         'string_data' => "updated hello world",
         'integer_data' => 1000,
-        'bool_data' => 0,
+        'bool_data' => false,
     ]
 );
 var_dump($r);
